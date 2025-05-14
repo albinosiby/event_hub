@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "751270723336",
+    "project_id": "event-hub-92781",
+    "storage_bucket": "event-hub-92781.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:751270723336:android:8877d8963c6240c671f6bd",
+        "android_client_info": {
+          "package_name": "com.example.event_hub"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "751270723336-4hprk83g7b6rhdtlireiogtdjgnidbd4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB5-5J1T1yzF7HRKZ61ESKkD5YmtD8KV6A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "751270723336-4hprk83g7b6rhdtlireiogtdjgnidbd4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
