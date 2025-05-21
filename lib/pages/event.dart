@@ -1,4 +1,5 @@
 import 'package:event_hub/pages/viewEvent.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -109,6 +110,7 @@ class EventState extends State<Event> {
 
   Widget _buildEventList() {
     final now = DateTime.now();
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
 
     return StreamBuilder<QuerySnapshot>(
       stream:
@@ -125,14 +127,20 @@ class EventState extends State<Event> {
           return _buildEmptyState();
         }
 
-        // Filter events based on toggle (upcoming/past)
+        // Filter events based on toggle (upcoming/past) and organizer ID
         final events =
             snapshot.data!.docs.where((doc) {
               final event = doc.data() as Map<String, dynamic>;
               final eventTime = (event['eventDateTime'] as Timestamp).toDate();
-              return isUpcoming
-                  ? eventTime.isAfter(now)
-                  : eventTime.isBefore(now);
+              final organizerId = event['organizerId'] as String?;
+
+              final isTimeValid =
+                  isUpcoming ? eventTime.isAfter(now) : eventTime.isBefore(now);
+
+              // Exclude events created by the current user
+              final isNotCurrentUser = organizerId != currentUserId;
+
+              return isTimeValid && isNotCurrentUser;
             }).toList();
 
         if (events.isEmpty) {
@@ -211,7 +219,7 @@ class EventState extends State<Event> {
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF4A43EC),
-                            fontSize: 14,
+                            fontSize: 15,
                           ),
                         ),
                         const Text(
@@ -223,7 +231,7 @@ class EventState extends State<Event> {
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF4A43EC),
-                            fontSize: 14,
+                            fontSize: 15,
                           ),
                         ),
                         const Text(
@@ -235,7 +243,7 @@ class EventState extends State<Event> {
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF4A43EC),
-                            fontSize: 14,
+                            fontSize: 15,
                           ),
                         ),
                       ],
@@ -246,14 +254,14 @@ class EventState extends State<Event> {
                     Text(
                       event['eventName'] ?? 'Event Name',
                       style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 19,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
 
                     // Location (if available)
                     if (event['location'] != null) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 13),
                       Row(
                         children: [
                           Icon(

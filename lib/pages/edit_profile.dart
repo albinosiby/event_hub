@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'profile.dart';
+import 'home.dart';
 
 class EditProfile extends StatefulWidget {
   const EditProfile({super.key});
@@ -102,7 +102,10 @@ class _EditProfileState extends State<EditProfile> {
     } finally {
       setState(() => _isLoading = false);
     }
-    Navigator.push(context, MaterialPageRoute(builder: (context) => Profile()));
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => HomeScreen()),
+    );
   }
 
   void _showErrorSnackbar(String message) {

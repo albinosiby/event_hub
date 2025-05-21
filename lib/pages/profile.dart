@@ -63,9 +63,9 @@ class _ProfileState extends State<Profile> {
     // Safely extract data with null checks and defaults
     final aboutText = userData?['about'] as String? ?? 'No bio added yet';
     final interests = List<String>.from(userData?['interests'] ?? []);
-    final followers = (userData?['followers'] as int?) ?? 0;
-    final following = (userData?['following'] as int?) ?? 0;
-
+    final followers = List<String>.from(userData?['followers'] ?? []).length;
+    final following = List<String>.from(userData?['following'] ?? []).length;
+    final Name = userData?['displayName'] as String? ?? 'unknown';
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -87,7 +87,7 @@ class _ProfileState extends State<Profile> {
 
           // Display Name
           Text(
-            user?.displayName ?? 'No Name',
+            Name,
             style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w500),
             textAlign: TextAlign.center,
           ),
@@ -209,10 +209,6 @@ class _ProfileState extends State<Profile> {
         Container(
           width: double.infinity, // Takes full width
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.grey[100],
-            borderRadius: BorderRadius.circular(10),
-          ),
           child: Text(
             aboutText ?? 'Add your about to let others know you better',
             style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w400),

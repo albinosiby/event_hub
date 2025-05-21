@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'profileview.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class Viewevent extends StatefulWidget {
   final String eventId;
@@ -16,8 +17,7 @@ class _VieweventState extends State<Viewevent> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   String? _organizerName;
   String? _organizerProfileUrl;
-  String? uid;
-
+  String? _organizerId;
   @override
   void initState() {
     super.initState();
@@ -25,27 +25,39 @@ class _VieweventState extends State<Viewevent> {
   }
 
   Future<DocumentSnapshot> _fetchEventDetails() async {
-    final eventDoc =
-        await _firestore.collection('events').doc(widget.eventId).get();
-    final eventData = eventDoc.data() as Map<String, dynamic>;
-    final organizerId = eventData['organizerId'];
-    if (organizerId != null) {
-      await _loadOrganizerDetails(organizerId);
+    try {
+      final eventDoc =
+          await _firestore.collection('events').doc(widget.eventId).get();
+      if (!eventDoc.exists) {
+        throw Exception('Event not found');
+      }
+
+      final eventData = eventDoc.data() as Map<String, dynamic>;
+      _organizerId = eventData['organizerId'];
+
+      if (_organizerId != null) {
+        await _loadOrganizerDetails(_organizerId!);
+      }
+
+      return eventDoc;
+    } catch (e) {
+      throw Exception('Failed to load event: $e');
     }
-    print(organizerId);
-    uid = organizerId;
-    return eventDoc;
   }
 
   Future<void> _loadOrganizerDetails(String organizerId) async {
-    final userDoc = await _firestore.collection('users').doc(organizerId).get();
-    if (userDoc.exists) {
-      final userData = userDoc.data()!;
-      setState(() {
-        _organizerName = userData['displayName'] ?? 'unknown';
-        _organizerProfileUrl = userData['photoURL'] ?? userData['profileUrl'];
-      });
-      print(_organizerName);
+    try {
+      final userDoc =
+          await _firestore.collection('users').doc(organizerId).get();
+      if (userDoc.exists) {
+        final userData = userDoc.data()!;
+        setState(() {
+          _organizerName = userData['displayName'] ?? 'Unknown Organizer';
+          _organizerProfileUrl = userData['photoURL'];
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading organizer details: $e');
     }
   }
 
@@ -87,6 +99,7 @@ class _VieweventState extends State<Viewevent> {
           final event = snapshot.data!.data() as Map<String, dynamic>;
           final dateTime = (event['eventDateTime'] as Timestamp).toDate();
           final eventType = event['eventType']?.toString() ?? 'default';
+
           final eventImages = {
             'Workshop': 'assets/images/event/collab.png',
             'confre': 'assets/images/event/confre.jpeg',
@@ -161,39 +174,27 @@ class _VieweventState extends State<Viewevent> {
                           // Profile image with GestureDetector
                           GestureDetector(
                             onTap: () {
-                              print("Organizer image tapped");
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) => Profileview(
-                                        userId: event['organizerId'],
-                                      ),
-                                ),
-                              );
+                              if (_organizerId != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (context) =>
+                                            Profileview(userId: _organizerId!),
+                                  ),
+                                );
+                              }
                             },
-                            //organizerId: organizerId
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(15),
                               child:
-                                  _organizerProfileUrl != null
+                                  _organizerProfileUrl != null &&
+                                          _organizerProfileUrl!.isNotEmpty
                                       ? Image.network(
                                         _organizerProfileUrl!,
                                         width: 48,
                                         height: 48,
                                         fit: BoxFit.cover,
-                                        errorBuilder: (
-                                          context,
-                                          error,
-                                          stackTrace,
-                                        ) {
-                                          return Image.asset(
-                                            'assets/images/th.jpeg',
-                                            width: 48,
-                                            height: 48,
-                                            fit: BoxFit.cover,
-                                          );
-                                        },
                                       )
                                       : Image.asset(
                                         'assets/images/th.jpeg',
@@ -227,39 +228,10 @@ class _VieweventState extends State<Viewevent> {
                               ],
                             ),
                           ),
-
-                          // Follow Button
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color.fromRGBO(
-                                86,
-                                106,
-                                255,
-                                0.532,
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 8,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                            ),
-                            onPressed: () {
-                              // Follow functionality
-                            },
-                            child: const Text(
-                              'Follow',
-                              style: TextStyle(
-                                color: Color.fromARGB(162, 0, 0, 0),
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
 
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 10),
                       const Text(
                         'About Event',
                         style: TextStyle(
@@ -272,7 +244,6 @@ class _VieweventState extends State<Viewevent> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.grey[100],
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(

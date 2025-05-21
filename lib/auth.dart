@@ -42,18 +42,6 @@ class AuthService {
   }
 
   /// ✅ Log In with Email & Password
-  Future<User?> login(String email, String password) async {
-    try {
-      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      return userCredential.user;
-    } catch (e) {
-      print("❌ Login Error: $e");
-      return null;
-    }
-  }
 
   /// ✅ Log Out
   Future<void> logout() async {

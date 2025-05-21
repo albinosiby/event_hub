@@ -1,7 +1,7 @@
 import 'package:event_hub/pages/home.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:event_hub/auth.dart'; // Your authentication service
+import 'package:event_hub/auth.dart';
 import 'loginPage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -47,6 +47,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       }
       return;
     }
+
     if (mounted) {
       setState(() {
         _isLoading = true;
@@ -69,12 +70,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
         return;
       }
 
-      await _createNewUserDocument(user);
-
-      //await user.sendEmailVerification();
+      await _createNewUserDocument(user, name: _nameController.text.trim());
+      await user.sendEmailVerification();
 
       if (mounted) {
-        Navigator.pushReplacementNamed(context, '/home');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => HomeScreen()),
+        );
         _showSuccessSnackBar(
           context,
           'Registration successful! Please verify your email.',
@@ -109,19 +112,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
-  void _showSuccessSnackBar(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
-
-  void _handleGoogleSignIn() async {
+  Future<void> _handleGoogleSignIn() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
+
     try {
       final user = await _auth.signInWithGoogle();
       if (user == null) {
@@ -130,6 +124,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         }
         return;
       }
+
       final userDoc =
           await FirebaseFirestore.instance
               .collection('users')
@@ -149,14 +144,38 @@ class _SignUpScreenState extends State<SignUpScreen> {
     } catch (e) {
       debugPrint('Google Sign-In Error: $e');
       if (mounted) {
-        _showErrorSnackBar(context, "Error: ${e.toString()}");
+        _showErrorSnackBar(context, "Error during Google sign-in");
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // Helper methods
+  Future<void> _createNewUserDocument(User user, {String? name}) async {
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+      'uid': user.uid,
+      'email': user.email,
+      'displayName': name ?? user.displayName,
+      'photoURL': user.photoURL ?? "",
+      'createdAt': FieldValue.serverTimestamp(),
+      'lastLogin': FieldValue.serverTimestamp(),
+      'about': "",
+      'interests': [],
+      'followers': [],
+      'following': [],
+    });
+  }
+
+  void _showSuccessSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
   void _showErrorSnackBar(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -165,21 +184,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
         backgroundColor: Colors.redAccent,
       ),
     );
-  }
-
-  Future<void> _createNewUserDocument(User user) async {
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-      'uid': user.uid,
-      'email': user.email,
-      'displayName': user.displayName,
-      'photoURL': user.photoURL,
-      'createdAt': FieldValue.serverTimestamp(),
-      'lastLogin': FieldValue.serverTimestamp(),
-      'about': null,
-      'interst': null,
-      'follower': 0,
-      'following': 0,
-    });
   }
 
   @override
@@ -237,8 +241,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your name';
                     }
+                    if (value.length < 3) {
+                      return 'Name must be at least 3 characters';
+                    }
                     return null;
                   },
+                  textInputAction: TextInputAction.next,
                 ),
 
                 const SizedBox(height: 20),
@@ -260,11 +268,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your email';
                     }
-                    if (!value.contains('@')) {
+                    if (!RegExp(
+                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                    ).hasMatch(value)) {
                       return 'Please enter a valid email';
                     }
                     return null;
                   },
+                  textInputAction: TextInputAction.next,
                 ),
 
                 const SizedBox(height: 20),
@@ -299,8 +310,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     if (value.length < 6) {
                       return 'Password must be at least 6 characters';
                     }
+                    if (!value.contains(RegExp(r'[A-Z]'))) {
+                      return 'Password must contain at least one uppercase letter';
+                    }
+                    if (!value.contains(RegExp(r'[0-9]'))) {
+                      return 'Password must contain at least one number';
+                    }
                     return null;
                   },
+                  textInputAction: TextInputAction.next,
                 ),
 
                 const SizedBox(height: 20),
@@ -334,6 +352,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     }
                     return null;
                   },
+                  textInputAction: TextInputAction.done,
                 ),
 
                 const SizedBox(height: 35),
@@ -468,14 +487,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               ),
                             ),
                             TextButton(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => SignInScreen(),
-                                  ),
-                                );
-                              },
+                              onPressed:
+                                  _isLoading
+                                      ? null
+                                      : () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (context) => SignInScreen(),
+                                          ),
+                                        );
+                                      },
                               child: const Text(
                                 'Sign In',
                                 style: TextStyle(

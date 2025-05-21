@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class Profileview extends StatefulWidget {
-  final String? userId; // Add this to view other users' profiles
+  final String? userId;
   const Profileview({super.key, this.userId});
 
   @override
@@ -18,6 +18,9 @@ class _ProfileviewState extends State<Profileview>
   bool _isLoading = true;
   Map<String, dynamic>? _userData;
   bool _isFollowing = false;
+  bool _hasPendingRequest = false;
+  bool _isCurrentUser = false;
+  bool _hasFollowRequestFromCurrentUser = false;
 
   @override
   void initState() {
@@ -34,45 +37,160 @@ class _ProfileviewState extends State<Profileview>
 
   Future<void> _loadProfileData() async {
     try {
-      final userId = widget.userId ?? FirebaseAuth.instance.currentUser?.uid;
-      if (userId == null) return;
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      final profileUserId = widget.userId ?? currentUserId;
 
+      if (profileUserId == null) return;
+
+      setState(() {
+        _isCurrentUser = currentUserId == profileUserId;
+      });
+
+      // Load profile data
       final doc =
           await FirebaseFirestore.instance
               .collection('users')
-              .doc(userId)
+              .doc(profileUserId)
               .get();
 
       if (doc.exists) {
         setState(() {
           _userData = doc.data() as Map<String, dynamic>;
-          _isLoading = false;
         });
-
-        // Check if current user is following this profile
-        if (widget.userId != null &&
-            FirebaseAuth.instance.currentUser != null) {
-          final currentUserDoc =
-              await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(FirebaseAuth.instance.currentUser!.uid)
-                  .get();
-
-          final following = List<String>.from(
-            currentUserDoc['following'] ?? [],
-          );
-          setState(() {
-            _isFollowing = following.contains(widget.userId);
-          });
-        }
       }
+
+      // Check follow status if viewing another user's profile
+      if (!_isCurrentUser && currentUserId != null) {
+        await _checkFollowStatus(currentUserId, profileUserId);
+      }
+
+      setState(() => _isLoading = false);
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error loading profile: $e')));
+    }
+  }
+
+  Future<void> _checkFollowStatus(
+    String currentUserId,
+    String profileUserId,
+  ) async {
+    // Check if current user is following profile user
+    final currentUserDoc =
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUserId)
+            .get();
+
+    final following = List<String>.from(currentUserDoc['following'] ?? []);
+    final followRequests = List<String>.from(
+      currentUserDoc['followRequests'] ?? [],
+    );
+
+    setState(() {
+      _isFollowing = following.contains(profileUserId);
+      _hasPendingRequest = followRequests.contains(profileUserId);
+    });
+  }
+
+  Future<void> _sendFollowRequest() async {
+    try {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      final profileUserId = widget.userId;
+
+      if (currentUserId == null || profileUserId == null) return;
+
+      setState(() => _isLoading = true);
+
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        // Add to profile user's follow requests
+        transaction.update(
+          FirebaseFirestore.instance.collection('users').doc(profileUserId),
+          {
+            'followRequests': FieldValue.arrayUnion([currentUserId]),
+          },
+        );
+        transaction.update(
+          FirebaseFirestore.instance.collection('users').doc(profileUserId),
+          {
+            'followers': FieldValue.arrayUnion([currentUserId]),
+          },
+        );
+        transaction.update(
+          FirebaseFirestore.instance.collection('users').doc(currentUserId),
+          {
+            'following': FieldValue.arrayUnion([profileUserId]),
+          },
+        );
+      });
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Follow request sent')));
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error sending request: $e')));
+    }
+  }
+
+  Future<void> _handleFollowBack(String userId) async {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId == null) return;
+
+    try {
+      setState(() => _isLoading = true);
+
+      final batch = FirebaseFirestore.instance.batch();
+
+      // 1. Remove from current user's followRequests list
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(currentUserId),
+        {
+          'followRequests': FieldValue.arrayRemove([userId]),
+        },
+      );
+
+      // 3. Update both users' followers/following arrays
+      batch.update(FirebaseFirestore.instance.collection('users').doc(userId), {
+        'followers': FieldValue.arrayUnion([currentUserId]),
+      });
+
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(currentUserId),
+        {
+          'following': FieldValue.arrayUnion([userId]),
+        },
+      );
+      batch.set(FirebaseFirestore.instance.collection('mutualFollows').doc(), {
+        'user1': currentUserId,
+        'user2': userId,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      await batch.commit();
+
+      setState(() {
+        _hasPendingRequest = false;
+        _isFollowing = true;
+        _isLoading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Successfully followed back!')),
+      );
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error following back: $e')));
     }
   }
 
@@ -86,7 +204,7 @@ class _ProfileviewState extends State<Profileview>
       setState(() => _isLoading = true);
 
       if (_isFollowing) {
-        // Unfollow
+        // Unfollow logic
         await FirebaseFirestore.instance.runTransaction((transaction) async {
           transaction.update(
             FirebaseFirestore.instance.collection('users').doc(profileUserId),
@@ -102,21 +220,7 @@ class _ProfileviewState extends State<Profileview>
           );
         });
       } else {
-        // Follow
-        await FirebaseFirestore.instance.runTransaction((transaction) async {
-          transaction.update(
-            FirebaseFirestore.instance.collection('users').doc(profileUserId),
-            {
-              'followers': FieldValue.arrayUnion([currentUserId]),
-            },
-          );
-          transaction.update(
-            FirebaseFirestore.instance.collection('users').doc(currentUserId),
-            {
-              'following': FieldValue.arrayUnion([profileUserId]),
-            },
-          );
-        });
+        return;
       }
 
       setState(() {
@@ -137,71 +241,94 @@ class _ProfileviewState extends State<Profileview>
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
         backgroundColor: Colors.white,
-        appBar: AppBar(backgroundColor: Colors.white, elevation: 0),
-        body: SafeArea(
-          child: Column(
-            children: [
-              // Profile Header Section
-              _buildProfileHeader(),
-              const SizedBox(height: 22),
+        elevation: 0,
+        title: const Text('Profile', style: TextStyle(color: Colors.black)),
+        iconTheme: const IconThemeData(color: Colors.black),
+      ),
+      body: DefaultTabController(
+        length: 3,
+        child: Column(
+          children: [
+            // Profile Header Section
+            _buildProfileHeader(),
+            const SizedBox(height: 22),
 
-              // Follow/Message Buttons
-              if (widget.userId != null) _buildActionButtons(),
-              const SizedBox(height: 25),
+            // Follow/Message Buttons
+            if (!_isCurrentUser && widget.userId != null) _buildActionButtons(),
+            const SizedBox(height: 25),
 
-              // Tab Bar
-              _buildTabBar(),
-
-              // Tab Content
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildAboutTab(),
-                    _buildEventsTab(),
-                    _buildReviewsTab(),
-                  ],
+            // Tab Bar
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: TabBar(
+                controller: _tabController,
+                indicatorColor: const Color(0xFF5669FF),
+                labelColor: Colors.black,
+                unselectedLabelColor: Colors.grey,
+                labelStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
                 ),
+                tabs: const [
+                  Tab(text: "ABOUT"),
+                  Tab(text: "EVENTS"),
+                  Tab(text: "REVIEWS"),
+                ],
               ),
-            ],
-          ),
+            ),
+
+            // Tab Content
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildAboutTab(),
+                  _buildEventsTab(),
+                  _buildReviewsTab(),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildProfileHeader() {
-    //final followers = List<String>.from(_userData?['followers'] ?? []).length;
-    //final following = List<String>.from(_userData?['following'] ?? []).length;
-    final photoUrl =
-        _userData?['photoUrl'] ?? FirebaseAuth.instance.currentUser?.photoURL;
+    final followers = List<String>.from(_userData?['followers'] ?? []).length;
+    final following = List<String>.from(_userData?['following'] ?? []).length;
+    final photoUrl = _userData?['photoURL'];
 
-    return Column(
-      children: [
-        const SizedBox(height: 20),
-        CircleAvatar(
-          radius: 50,
-          backgroundColor: Colors.grey[200],
-          backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-          child:
-              photoUrl == null
-                  ? const Icon(Icons.person, size: 50, color: Colors.grey)
-                  : null,
-        ),
-        const SizedBox(height: 20),
-        Text(
-          _userData?['displayName'] ??
-              FirebaseAuth.instance.currentUser?.displayName ??
-              'No Name',
-          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 20),
-        _buildStatsRow(0, 0),
-      ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
+          CircleAvatar(
+            radius: 50,
+            backgroundColor: Colors.grey[200],
+            backgroundImage:
+                photoUrl != null && photoUrl.isNotEmpty
+                    ? NetworkImage(photoUrl)
+                    : null,
+            child:
+                photoUrl == null || photoUrl.isEmpty
+                    ? const Icon(Icons.person, size: 50, color: Colors.grey)
+                    : null,
+          ),
+          const SizedBox(height: 20),
+          Text(
+            _userData?['displayName'] ?? 'No Name',
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 20),
+          _buildStatsRow(followers, following),
+        ],
+      ),
     );
   }
 
@@ -210,7 +337,7 @@ class _ProfileviewState extends State<Profileview>
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _buildStatItem(followers.toString(), 'Followers'),
-        const VerticalDivider(width: 30, thickness: 1),
+        const SizedBox(width: 30),
         _buildStatItem(following.toString(), 'Following'),
       ],
     );
@@ -221,9 +348,9 @@ class _ProfileviewState extends State<Profileview>
       children: [
         Text(
           value,
-          style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        Text(label, style: TextStyle(fontSize: 15, color: Colors.grey[600])),
+        Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
       ],
     );
   }
@@ -232,81 +359,132 @@ class _ProfileviewState extends State<Profileview>
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          SizedBox(
-            width: 160,
-            height: 55,
-            child: _buildButton(
-              text: _isFollowing ? 'Following' : 'Follow',
-              icon: _isFollowing ? Icons.check : Icons.person_add,
-              isPrimary: !_isFollowing,
-              onPressed: _toggleFollow,
-            ),
-          ),
+          Expanded(child: _buildFollowButton()),
           const SizedBox(width: 15),
-          SizedBox(
-            width: 160,
-            height: 55,
-            child: _buildButton(
-              text: 'Message',
-              icon: Icons.message,
-              isPrimary: false,
-              onPressed: () {},
-            ),
-          ),
+          Expanded(child: _buildMessageButton()),
         ],
       ),
     );
   }
 
-  Widget _buildButton({
-    required String text,
-    required IconData icon,
-    required bool isPrimary,
-    required VoidCallback onPressed,
-  }) {
-    return ElevatedButton(
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: isPrimary ? const Color(0xFF5669FF) : Colors.white,
-        foregroundColor: isPrimary ? Colors.white : const Color(0xFF5669FF),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(
-            color: const Color(0xFF5669FF),
-            width: isPrimary ? 0 : 2,
+  Widget _buildFollowButton() {
+    return SizedBox(
+      height: 50,
+      child: ElevatedButton(
+        onPressed:
+            _isLoading
+                ? null
+                : () {
+                  if (_hasPendingRequest) {
+                    _handleFollowBack(widget.userId!);
+                  } else if (_isFollowing) {
+                    _toggleFollow();
+                  } else {
+                    _sendFollowRequest();
+                  }
+                },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _getButtonColor(),
+          foregroundColor: _getTextColor(),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: const Color(0xFF5669FF),
+              width: _shouldShowBorder() ? 1 : 0,
+            ),
           ),
         ),
-        padding: const EdgeInsets.symmetric(vertical: 15),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 22),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w400),
-          ),
-        ],
+        child:
+            _isLoading
+                ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+                : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(_getButtonIcon(), size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      _getButtonText(),
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                  ],
+                ),
       ),
     );
   }
 
-  Widget _buildTabBar() {
-    return Container(
-      child: TabBar(
-        controller: _tabController,
-        indicatorColor: const Color(0xFF5669FF),
-        labelColor: Colors.black,
-        unselectedLabelColor: Colors.grey,
-        labelStyle: TextStyle(fontSize: 17.5, fontWeight: FontWeight.w400),
-        tabs: const [
-          Tab(text: "ABOUT"),
-          Tab(text: "EVENTS"),
-          Tab(text: "REVIEWS"),
-        ],
+  Color _getButtonColor() {
+    if (_hasPendingRequest) {
+      return Colors.white;
+    } else if (_isFollowing) {
+      return Colors.white;
+    }
+    return const Color(0xFF5669FF);
+  }
+
+  Color _getTextColor() {
+    if (_hasPendingRequest) {
+      return const Color(0xFF5669FF);
+    } else if (_isFollowing) {
+      return const Color(0xFF5669FF);
+    }
+    return Colors.white;
+  }
+
+  bool _shouldShowBorder() {
+    return _hasPendingRequest || _isFollowing;
+  }
+
+  IconData _getButtonIcon() {
+    if (_hasPendingRequest) {
+      return Icons.hourglass_top;
+    } else if (_isFollowing) {
+      return Icons.check;
+    }
+    return Icons.person_add;
+  }
+
+  String _getButtonText() {
+    if (_hasPendingRequest) {
+      return 'Follow Back';
+    } else if (_isFollowing) {
+      return 'Following';
+    } else if (_hasFollowRequestFromCurrentUser) {
+      return 'Requested';
+    }
+    return 'Follow';
+  }
+
+  Widget _buildMessageButton() {
+    return SizedBox(
+      height: 50,
+      child: ElevatedButton(
+        onPressed: () {
+          // Handle message button press
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF5669FF),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: Color(0xFF5669FF), width: 1),
+          ),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.message, size: 20),
+            SizedBox(width: 8),
+            Text('Message', style: TextStyle(fontSize: 16)),
+          ],
+        ),
       ),
     );
   }
@@ -507,7 +685,6 @@ class _ProfileviewState extends State<Profileview>
   }
 
   Widget _buildReviewsTab() {
-    // You can implement reviews fetching here similarly
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
