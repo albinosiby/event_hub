@@ -18,6 +18,8 @@ class _VieweventState extends State<Viewevent> {
   String? _organizerName;
   String? _organizerProfileUrl;
   String? _organizerId;
+
+  bool _isFollowing = false;
   @override
   void initState() {
     super.initState();
@@ -101,13 +103,13 @@ class _VieweventState extends State<Viewevent> {
           final eventType = event['eventType']?.toString() ?? 'default';
 
           final eventImages = {
-            'Workshop': 'assets/images/event/collab.png',
-            'confre': 'assets/images/event/confre.jpeg',
+            'Conference': 'assets/images/event/confre.jpeg',
             'default': 'assets/images/event/default.jpeg',
-            'Meetup': 'assets/images/event/meetup.jpeg',
-            'exibution': 'assets/images/event/exib.jpeg',
+            'food fest': 'assets/images/event/food.jpg',
+            'Exhibition': 'assets/images/event/exib.jpeg',
             'reception': 'assets/images/event/recep.jpeg',
             'Tech': 'assets/images/event/tech.jpeg',
+            'music': 'assets/images/event/default.jpeg',
           };
 
           return SingleChildScrollView(
@@ -154,8 +156,7 @@ class _VieweventState extends State<Viewevent> {
                       _buildInfoRow(
                         icon: 'assets/images/Date.png',
                         title: DateFormat('dd MMMM, yyyy').format(dateTime),
-                        subtitle:
-                            '${DateFormat('EEEE, h:mma').format(dateTime)} - ${DateFormat('h:mma').format(dateTime.add(const Duration(hours: 3)))}',
+                        subtitle: DateFormat('EEEE, h:mma').format(dateTime),
                       ),
                       const SizedBox(height: 30),
 
@@ -208,21 +209,55 @@ class _VieweventState extends State<Viewevent> {
 
                           // Organizer Info
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            child: Row(
                               children: [
-                                Text(
-                                  _organizerName ?? 'Loading organizer...',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _organizerName ??
+                                            'Loading organizer...',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const Text(
+                                        'Organizer',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w300,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const Text(
-                                  'Organizer',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w300,
+                                // Add follow button here
+                                ElevatedButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _isFollowing = !_isFollowing;
+                                    });
+                                    // _handleFollowOrganizer();
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor:
+                                        _isFollowing
+                                            ? Colors.grey
+                                            : Colors.blue,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _isFollowing ? 'Following' : 'Follow',
                                   ),
                                 ),
                               ],
@@ -262,6 +297,63 @@ class _VieweventState extends State<Viewevent> {
       ),
     );
   }
+
+  /*void _handleFollowOrganizer() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null || _organizerId == null) return;
+    // Check if the current user is already following the organizer
+    final userDoc =
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .get();
+    final userData = userDoc.data();
+
+    if (userData != null &&
+        userData['following'] != null &&
+        (userData['following'] as List).contains(_organizerId)) {
+      setState(() {
+        _isFollowing = true;
+      });
+    } else {
+      setState(() {
+        _isFollowing = false;
+      });
+    }
+    try {
+      if (_isFollowing) {
+        // Unfollow logic
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .update({
+              'following': FieldValue.arrayRemove([_organizerId]),
+            });
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_organizerId)
+            .update({
+              'followers': FieldValue.arrayRemove([currentUser.uid]),
+            });
+      } else {
+        // Follow logic
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_organizerId)
+            .update({
+              'followrequests': FieldValue.arrayUnion([currentUser.uid]),
+            });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      // Revert the button state if there was an error
+      setState(() {
+        _isFollowing = !_isFollowing;
+      });
+    }
+  }*/
 
   Widget _buildInfoRow({
     required String icon,

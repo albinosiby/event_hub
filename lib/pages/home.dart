@@ -1,5 +1,3 @@
-// ignore_for_file: unused_field
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:event_hub/pages/viewEvent.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -13,6 +11,7 @@ import 'notification.dart';
 import 'login/loginPage.dart';
 import 'contact_us.dart';
 import 'create_event.dart';
+import 'listEvent.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,11 +22,12 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int currenttab = 0;
-  final List<Widget> screens = [HomeContent(), map(), Event(), Profile()];
+  final List<Widget> screens = [HomeContent(), MapScreen(), Event(), Profile()];
   final PageStorageBucket bucket = PageStorageBucket();
   Widget currentScreen = const HomeContent();
   final User? user = FirebaseAuth.instance.currentUser;
   final AuthService _authService = AuthService();
+
   bool _isLoading = false;
 
   @override
@@ -90,7 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 onPressed: () {
                   setState(() {
-                    currentScreen = const map();
+                    currentScreen = const MapScreen();
                     currenttab = 2;
                   });
                 },
@@ -270,14 +270,52 @@ class _HomeContentState extends State<HomeContent> {
                           color: Colors.white,
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.notifications_on),
-                        color: Colors.white,
-                        iconSize: 28,
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => Notifi()),
+                      StreamBuilder<DocumentSnapshot>(
+                        stream:
+                            FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(FirebaseAuth.instance.currentUser?.uid)
+                                .snapshots(),
+                        builder: (context, snapshot) {
+                          bool hasRequests = false;
+                          if (snapshot.hasData && snapshot.data!.exists) {
+                            final data =
+                                snapshot.data!.data() as Map<String, dynamic>;
+                            final requests =
+                                data['followRequest'] as List<dynamic>?;
+                            hasRequests =
+                                requests != null && requests.isNotEmpty;
+                          }
+
+                          return Stack(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.notifications_on),
+                                color: Colors.white,
+                                iconSize: 28,
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => Notifi(),
+                                    ),
+                                  );
+                                },
+                              ),
+                              if (hasRequests)
+                                Positioned(
+                                  right: 6,
+                                  top: 6,
+                                  child: Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           );
                         },
                       ),
@@ -299,6 +337,14 @@ class _HomeContentState extends State<HomeContent> {
                         child: TextField(
                           textAlign: TextAlign.start,
                           style: const TextStyle(color: Colors.white),
+                          onTap: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const Listevent(),
+                              ),
+                            );
+                          },
                           decoration: const InputDecoration(
                             hintText: 'Search...',
                             hintStyle: TextStyle(
@@ -325,9 +371,8 @@ class _HomeContentState extends State<HomeContent> {
                             borderRadius: BorderRadius.circular(17),
                           ),
                         ),
-                        onPressed: () {
-                          print('Filter button tapped');
-                        },
+                        onPressed:
+                            _showFilterDialog, // Changed to call our new method
                         child: const Row(
                           children: [
                             Icon(
@@ -417,6 +462,257 @@ class _HomeContentState extends State<HomeContent> {
     );
   }
 
+  void _showFilterDialog() {
+    final Map<String, IconData> eventTypeIcons = {
+      'Conference': Icons.people_outline,
+      'Food fest': Icons.fastfood_outlined,
+      'Music': Icons.music_note_outlined,
+      'Exhibition': Icons.art_track_outlined,
+      'Tech': Icons.computer_outlined,
+      'Other': Icons.category_outlined,
+    };
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        String? tempSelectedEventType;
+        String? tempSelectedTimeFrame;
+
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Align(
+              alignment: Alignment.bottomCenter,
+              child: FractionallySizedBox(
+                heightFactor: 0.75,
+                widthFactor: 1.0,
+                child: Dialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  insetPadding: EdgeInsets.zero,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                        ),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Event Type',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 12,
+                                  children:
+                                      eventTypeIcons.entries.map((entry) {
+                                        final type = entry.key;
+                                        final icon = entry.value;
+
+                                        final isSelected =
+                                            tempSelectedEventType == type;
+
+                                        return GestureDetector(
+                                          onTap: () {
+                                            setModalState(() {
+                                              tempSelectedEventType =
+                                                  isSelected ? null : type;
+                                            });
+                                          },
+                                          child: SizedBox(
+                                            width: 62,
+                                            height: 72,
+                                            child: Column(
+                                              children: [
+                                                Container(
+                                                  width: 50,
+                                                  height: 50,
+                                                  decoration: BoxDecoration(
+                                                    shape: BoxShape.circle,
+                                                    color:
+                                                        isSelected
+                                                            ? const Color(
+                                                              0xFF4A43EC,
+                                                            ).withOpacity(0.4)
+                                                            : Colors.grey
+                                                                .withOpacity(
+                                                                  0.4,
+                                                                ),
+                                                    border: Border.all(
+                                                      color:
+                                                          isSelected
+                                                              ? const Color(
+                                                                0xFF4A43EC,
+                                                              )
+                                                              : Colors.black87,
+                                                      width: 2,
+                                                    ),
+                                                  ),
+                                                  child: Icon(
+                                                    icon,
+                                                    size: 25,
+                                                    color:
+                                                        isSelected
+                                                            ? const Color(
+                                                              0xFF4A43EC,
+                                                            )
+                                                            : Colors.black,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  type,
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color:
+                                                        isSelected
+                                                            ? const Color(
+                                                              0xFF4A43EC,
+                                                            )
+                                                            : Colors.black,
+                                                  ),
+                                                  textAlign: TextAlign.center,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                ),
+                                const SizedBox(height: 20),
+                                const Text(
+                                  'Time & Date',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children:
+                                      ['Today', 'Tomorrow', 'This week'].map((
+                                        timeFrame,
+                                      ) {
+                                        final isSelected =
+                                            tempSelectedTimeFrame == timeFrame;
+
+                                        return FilterChip(
+                                          label: Text(timeFrame),
+                                          selected: isSelected,
+                                          onSelected: (bool selected) {
+                                            setModalState(() {
+                                              tempSelectedTimeFrame =
+                                                  selected ? timeFrame : null;
+                                            });
+                                          },
+                                        );
+                                      }).toList(),
+                                ),
+                                const SizedBox(height: 8),
+                                InkWell(
+                                  onTap: () {},
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: const [
+                                            Icon(
+                                              Icons.calendar_today_rounded,
+                                              color: Color(0xFF4A43EC),
+                                            ),
+                                            SizedBox(width: 10),
+                                            Text(
+                                              'Choose from calendar',
+                                              style: TextStyle(
+                                                color: Colors.black87,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const Icon(
+                                          Icons.arrow_forward_ios,
+                                          color: Color(0xFF4A43EC),
+                                          size: 16,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                              },
+                              child: const Text('RESET'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF4A43EC),
+                              ),
+                              child: const Text(
+                                'APPLY',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildupcoming() {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
 
@@ -460,13 +756,13 @@ class _HomeContentState extends State<HomeContent> {
                 final eventType = event['eventType']?.toString() ?? 'default';
 
                 final eventImages = {
-                  'Workshop': 'assets/images/event/collab.png',
-                  'confre': 'assets/images/event/confre.jpeg',
+                  'Conference': 'assets/images/event/confre.jpeg',
                   'default': 'assets/images/event/default.jpeg',
-                  'Meetup': 'assets/images/event/meetup.jpeg',
-                  'exibution': 'assets/images/event/exib.jpeg',
+                  'food fest': 'assets/images/event/food.jpg',
+                  'Exhibition': 'assets/images/event/exib.jpeg',
                   'reception': 'assets/images/event/recep.jpeg',
                   'Tech': 'assets/images/event/tech.jpeg',
+                  'music': 'assets/images/event/default.jpeg',
                 };
 
                 return GestureDetector(
@@ -553,24 +849,6 @@ class _HomeContentState extends State<HomeContent> {
                                     ),
                                   ),
                                 ),
-
-                                //  Top-right bookmark icon
-                                /* Positioned(
-                                  top: 10,
-                                  right: 10,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    padding: const EdgeInsets.all(6),
-                                    child: const Icon(
-                                      Icons.bookmark,
-                                      color: Colors.redAccent,
-                                      size: 16,
-                                    ),
-                                  ),
-                                ),*/
                               ],
                             ),
                           ),
@@ -640,72 +918,17 @@ class _HomeContentState extends State<HomeContent> {
   }
 
   Widget _buildNearby() {
-    return SizedBox(
-      height: 200,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: 5, // Replace with your actual event count
-        itemBuilder: (context, index) {
-          return Container(
-            width: 160,
-            margin: const EdgeInsets.only(right: 15),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.3),
-                  spreadRadius: 1,
-                  blurRadius: 5,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(15),
-                    topRight: Radius.circular(15),
-                  ),
-                  child: Image.asset(
-                    'assets/images/event.png', // Replace with your image path
-                    height: 100,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Nearby Event ${index + 1}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      const Text(
-                        'Location',
-                        style: TextStyle(color: Colors.grey, fontSize: 14),
-                      ),
-                      const SizedBox(height: 5),
-                      const Text(
-                        'Date & Time',
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 30),
+      child: Center(
+        child: Text(
+          'No nearby events found.',
+          style: TextStyle(
+            fontSize: 16,
+            color: Colors.grey[600],
+            fontWeight: FontWeight.w500,
+          ),
+        ),
       ),
     );
   }

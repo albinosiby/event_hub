@@ -18,9 +18,9 @@ class _ProfileviewState extends State<Profileview>
   bool _isLoading = true;
   Map<String, dynamic>? _userData;
   bool _isFollowing = false;
-  bool _hasPendingRequest = false;
+
   bool _isCurrentUser = false;
-  bool _hasFollowRequestFromCurrentUser = false;
+  bool _hasRequested = false;
 
   @override
   void initState() {
@@ -83,15 +83,20 @@ class _ProfileviewState extends State<Profileview>
             .collection('users')
             .doc(currentUserId)
             .get();
+    final profileUserDoc =
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(profileUserId)
+            .get();
 
     final following = List<String>.from(currentUserDoc['following'] ?? []);
     final followRequests = List<String>.from(
-      currentUserDoc['followRequests'] ?? [],
+      profileUserDoc['followrequests'] ?? [],
     );
 
     setState(() {
       _isFollowing = following.contains(profileUserId);
-      _hasPendingRequest = followRequests.contains(profileUserId);
+      _hasRequested = followRequests.contains(currentUserId);
     });
   }
 
@@ -109,25 +114,14 @@ class _ProfileviewState extends State<Profileview>
         transaction.update(
           FirebaseFirestore.instance.collection('users').doc(profileUserId),
           {
-            'followRequests': FieldValue.arrayUnion([currentUserId]),
-          },
-        );
-        transaction.update(
-          FirebaseFirestore.instance.collection('users').doc(profileUserId),
-          {
-            'followers': FieldValue.arrayUnion([currentUserId]),
-          },
-        );
-        transaction.update(
-          FirebaseFirestore.instance.collection('users').doc(currentUserId),
-          {
-            'following': FieldValue.arrayUnion([profileUserId]),
+            'followrequests': FieldValue.arrayUnion([currentUserId]),
           },
         );
       });
 
       setState(() {
         _isLoading = false;
+        _hasRequested = true;
       });
 
       ScaffoldMessenger.of(
@@ -138,59 +132,6 @@ class _ProfileviewState extends State<Profileview>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error sending request: $e')));
-    }
-  }
-
-  Future<void> _handleFollowBack(String userId) async {
-    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    if (currentUserId == null) return;
-
-    try {
-      setState(() => _isLoading = true);
-
-      final batch = FirebaseFirestore.instance.batch();
-
-      // 1. Remove from current user's followRequests list
-      batch.update(
-        FirebaseFirestore.instance.collection('users').doc(currentUserId),
-        {
-          'followRequests': FieldValue.arrayRemove([userId]),
-        },
-      );
-
-      // 3. Update both users' followers/following arrays
-      batch.update(FirebaseFirestore.instance.collection('users').doc(userId), {
-        'followers': FieldValue.arrayUnion([currentUserId]),
-      });
-
-      batch.update(
-        FirebaseFirestore.instance.collection('users').doc(currentUserId),
-        {
-          'following': FieldValue.arrayUnion([userId]),
-        },
-      );
-      batch.set(FirebaseFirestore.instance.collection('mutualFollows').doc(), {
-        'user1': currentUserId,
-        'user2': userId,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      await batch.commit();
-
-      setState(() {
-        _hasPendingRequest = false;
-        _isFollowing = true;
-        _isLoading = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Successfully followed back!')),
-      );
-    } catch (e) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error following back: $e')));
     }
   }
 
@@ -207,20 +148,12 @@ class _ProfileviewState extends State<Profileview>
         // Unfollow logic
         await FirebaseFirestore.instance.runTransaction((transaction) async {
           transaction.update(
-            FirebaseFirestore.instance.collection('users').doc(profileUserId),
-            {
-              'followers': FieldValue.arrayRemove([currentUserId]),
-            },
-          );
-          transaction.update(
             FirebaseFirestore.instance.collection('users').doc(currentUserId),
             {
               'following': FieldValue.arrayRemove([profileUserId]),
             },
           );
         });
-      } else {
-        return;
       }
 
       setState(() {
@@ -376,8 +309,8 @@ class _ProfileviewState extends State<Profileview>
             _isLoading
                 ? null
                 : () {
-                  if (_hasPendingRequest) {
-                    _handleFollowBack(widget.userId!);
+                  if (_hasRequested) {
+                    return;
                   } else if (_isFollowing) {
                     _toggleFollow();
                   } else {
@@ -421,29 +354,25 @@ class _ProfileviewState extends State<Profileview>
   }
 
   Color _getButtonColor() {
-    if (_hasPendingRequest) {
-      return Colors.white;
-    } else if (_isFollowing) {
+    if (_isFollowing) {
       return Colors.white;
     }
     return const Color(0xFF5669FF);
   }
 
   Color _getTextColor() {
-    if (_hasPendingRequest) {
-      return const Color(0xFF5669FF);
-    } else if (_isFollowing) {
+    if (_isFollowing) {
       return const Color(0xFF5669FF);
     }
     return Colors.white;
   }
 
   bool _shouldShowBorder() {
-    return _hasPendingRequest || _isFollowing;
+    return _hasRequested || _isFollowing;
   }
 
   IconData _getButtonIcon() {
-    if (_hasPendingRequest) {
+    if (_hasRequested) {
       return Icons.hourglass_top;
     } else if (_isFollowing) {
       return Icons.check;
@@ -452,12 +381,10 @@ class _ProfileviewState extends State<Profileview>
   }
 
   String _getButtonText() {
-    if (_hasPendingRequest) {
-      return 'Follow Back';
+    if (_hasRequested) {
+      return 'Requested';
     } else if (_isFollowing) {
       return 'Following';
-    } else if (_hasFollowRequestFromCurrentUser) {
-      return 'Requested';
     }
     return 'Follow';
   }
@@ -494,10 +421,12 @@ class _ProfileviewState extends State<Profileview>
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (aboutText != null && aboutText.isNotEmpty)
-            Text(aboutText, style: const TextStyle(fontSize: 17))
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [Text(aboutText, style: const TextStyle(fontSize: 17))],
+            )
           else
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -558,13 +487,13 @@ class _ProfileviewState extends State<Profileview>
     final eventType = event['eventType']?.toString() ?? 'default';
     // Define images for different event types
     final eventImages = {
-      'Workshop': 'assets/images/event/collab.png',
-      'confre': 'assets/images/event/confre.jpeg',
+      'Conference': 'assets/images/event/confre.jpeg',
       'default': 'assets/images/event/default.jpeg',
-      'Meetup': 'assets/images/event/meetup.jpeg',
-      'exibution': 'assets/images/event/exib.jpeg',
+      'food fest': 'assets/images/event/food.jpg',
+      'Exhibition': 'assets/images/event/exib.jpeg',
       'reception': 'assets/images/event/recep.jpeg',
       'Tech': 'assets/images/event/tech.jpeg',
+      'music': 'assets/images/event/default.jpeg',
     };
     print(event['name']);
     print(eventType);

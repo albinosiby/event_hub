@@ -28,11 +28,9 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   // Event types for dropdown
   final List<String> _eventTypes = [
     'Conference',
-    'Workshop',
+    'Food fest',
     'music',
     'Exhibition',
-    'Meetup',
-    'Sports',
     'Tech',
     'Other',
   ];

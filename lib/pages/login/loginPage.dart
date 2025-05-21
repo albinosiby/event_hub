@@ -39,9 +39,10 @@ class _SignInScreenState extends State<SignInScreen> {
         password: _passwordController.text.trim(),
       );
       if (mounted) {
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => HomeScreen()),
+          (Route<dynamic> route) => false,
         );
       }
       // Success
@@ -74,9 +75,10 @@ class _SignInScreenState extends State<SignInScreen> {
       }
 
       if (mounted) {
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => HomeScreen()),
+          (Route<dynamic> route) => false,
         );
       }
     } catch (e) {
@@ -111,6 +113,8 @@ class _SignInScreenState extends State<SignInScreen> {
       'interests': [],
       'followers': [],
       'following': [],
+      'followrequests': [],
+      'notifications': [],
     });
   }
 

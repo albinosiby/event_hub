@@ -42,6 +42,9 @@ dependencies:
   url_launcher: ^6.3.1
   intl: ^0.20.2
   flutter_rating_stars: ^1.1.0
+  google_maps_flutter: ^2.12.2
+  geolocator: ^14.0.0
+  permission_handler: ^12.0.0+1
 
 dev_dependencies:
   flutter_test:
@@ -78,6 +81,7 @@ flutter:
     - assets/images/event/exib.jpeg
     - assets/images/event/recep.jpeg
     - assets/images/event/tech.jpeg
+    - assets/images/event/food.jpg
     - assets/images/Date.png
     - assets/images/Location.png
     - assets/images/th.jpeg

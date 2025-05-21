@@ -102,7 +102,8 @@ class _EditProfileState extends State<EditProfile> {
     } finally {
       setState(() => _isLoading = false);
     }
-    Navigator.push(
+    if (!mounted) return;
+    Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => HomeScreen()),
     );

@@ -136,9 +136,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
       }
 
       if (mounted) {
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => HomeScreen()),
+          (Route<dynamic> route) => false,
         );
       }
     } catch (e) {
@@ -163,6 +164,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
       'interests': [],
       'followers': [],
       'following': [],
+      'followrequests': [],
+      'notifications': [],
     });
   }
 

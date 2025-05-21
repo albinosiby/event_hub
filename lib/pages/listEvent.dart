@@ -1,42 +1,55 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:event_hub/pages/viewEvent.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
-class Event extends StatefulWidget {
-  const Event({super.key});
+class Listevent extends StatefulWidget {
+  const Listevent({super.key});
+
   @override
-  State<Event> createState() => EventState();
+  State<Listevent> createState() => _ListeventState();
 }
 
-class EventState extends State<Event> {
-  bool isUpcoming = true;
+class _ListeventState extends State<Listevent> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
-          'Events',
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-            fontSize: 25,
-          ),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Events')),
       body: Column(
         children: [
-          const SizedBox(height: 20),
+          // Search Bar
+          // Set background color to white
+          // Search Bar
+          Padding(
+            padding: const EdgeInsets.all(16.0),
 
-          // Toggle Buttons
-          _buildToggleButtons(),
-          const SizedBox(height: 20),
-
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search events...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value.toLowerCase();
+                });
+              },
+            ),
+          ),
           // Event List
           Expanded(child: _buildEventList()),
         ],
@@ -44,114 +57,41 @@ class EventState extends State<Event> {
     );
   }
 
-  Widget _buildToggleButtons() {
-    return Container(
-      height: 45,
-      width: 300,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F1F1),
-        borderRadius: BorderRadius.circular(30),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => isUpcoming = true),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                decoration: BoxDecoration(
-                  color: isUpcoming ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(25),
-                  boxShadow:
-                      isUpcoming
-                          ? [BoxShadow(color: Colors.black12, blurRadius: 4)]
-                          : [],
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  'UPCOMING',
-                  style: TextStyle(
-                    color: isUpcoming ? const Color(0xFF4A43EC) : Colors.grey,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => isUpcoming = false),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                decoration: BoxDecoration(
-                  color: !isUpcoming ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(25),
-                  boxShadow:
-                      !isUpcoming
-                          ? [BoxShadow(color: Colors.black12, blurRadius: 4)]
-                          : [],
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  'PAST EVENTS',
-                  style: TextStyle(
-                    color: !isUpcoming ? const Color(0xFF4A43EC) : Colors.grey,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildEventList() {
-    final now = DateTime.now();
-    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    final userId = FirebaseAuth.instance.currentUser?.uid;
 
     return StreamBuilder<QuerySnapshot>(
       stream:
-          FirebaseFirestore.instance
-              .collection('events')
-              .orderBy('eventDateTime')
-              .snapshots(),
+          userId != null
+              ? FirebaseFirestore.instance.collection('events').snapshots()
+              : null,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return _buildEmptyState();
+          return const Center(child: Text('No events found'));
         }
 
-        // Filter events based on toggle (upcoming/past) and organizer ID
-        final events =
+        // Filter events based on search query
+        final filteredEvents =
             snapshot.data!.docs.where((doc) {
               final event = doc.data() as Map<String, dynamic>;
-              final eventTime = (event['eventDateTime'] as Timestamp).toDate();
-              final organizerId = event['organizerId'] as String?;
-
-              final isTimeValid =
-                  isUpcoming ? eventTime.isAfter(now) : eventTime.isBefore(now);
-
-              // Exclude events created by the current user
-              final isNotCurrentUser = organizerId != currentUserId;
-
-              return isTimeValid && isNotCurrentUser;
+              final eventName =
+                  event['eventName']?.toString().toLowerCase() ?? '';
+              return eventName.contains(_searchQuery);
             }).toList();
 
-        if (events.isEmpty) {
-          return _buildEmptyState();
+        if (filteredEvents.isEmpty) {
+          return const Center(child: Text('No matching events found'));
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          itemCount: events.length,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: filteredEvents.length,
           itemBuilder: (context, index) {
-            final event = events[index].data() as Map<String, dynamic>;
+            final event = filteredEvents[index].data() as Map<String, dynamic>;
             return _buildEventCard(event);
           },
         );
@@ -162,6 +102,7 @@ class EventState extends State<Event> {
   Widget _buildEventCard(Map<String, dynamic> event) {
     final dateTime = (event['eventDateTime'] as Timestamp).toDate();
     final eventType = event['eventType']?.toString() ?? 'default';
+
     // Define images for different event types
     final eventImages = {
       'Conference': 'assets/images/event/confre.jpeg',
@@ -172,8 +113,7 @@ class EventState extends State<Event> {
       'Tech': 'assets/images/event/tech.jpeg',
       'music': 'assets/images/event/default.jpeg',
     };
-    print(event['name']);
-    print(eventType);
+
     return InkWell(
       onTap: () {
         Navigator.push(
@@ -183,7 +123,7 @@ class EventState extends State<Event> {
           ),
         );
       },
-      borderRadius: BorderRadius.circular(12), // Match card's border radius
+      borderRadius: BorderRadius.circular(12),
       child: Card(
         margin: const EdgeInsets.only(bottom: 16),
         color: Colors.white,
@@ -219,7 +159,7 @@ class EventState extends State<Event> {
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF4A43EC),
-                            fontSize: 15,
+                            fontSize: 14,
                           ),
                         ),
                         const Text(
@@ -231,7 +171,7 @@ class EventState extends State<Event> {
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF4A43EC),
-                            fontSize: 15,
+                            fontSize: 14,
                           ),
                         ),
                         const Text(
@@ -243,7 +183,7 @@ class EventState extends State<Event> {
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF4A43EC),
-                            fontSize: 15,
+                            fontSize: 14,
                           ),
                         ),
                       ],
@@ -254,14 +194,14 @@ class EventState extends State<Event> {
                     Text(
                       event['eventName'] ?? 'Event Name',
                       style: const TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
 
                     // Location (if available)
                     if (event['location'] != null) ...[
-                      const SizedBox(height: 13),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
                           Icon(
@@ -286,30 +226,6 @@ class EventState extends State<Event> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Image.asset(
-            'assets/images/event.png',
-            height: 200,
-            fit: BoxFit.contain,
-          ),
-          const SizedBox(height: 20),
-          Text(
-            isUpcoming ? 'No Upcoming Events!' : 'No Past Events Found!',
-            style: const TextStyle(
-              fontSize: 16,
-              color: Colors.black,
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-        ],
       ),
     );
   }
