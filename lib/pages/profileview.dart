@@ -18,7 +18,6 @@ class _ProfileviewState extends State<Profileview>
   bool _isLoading = true;
   Map<String, dynamic>? _userData;
   bool _isFollowing = false;
-
   bool _isCurrentUser = false;
   bool _hasRequested = false;
 
@@ -45,25 +44,20 @@ class _ProfileviewState extends State<Profileview>
       setState(() {
         _isCurrentUser = currentUserId == profileUserId;
       });
-
       // Load profile data
       final doc =
           await FirebaseFirestore.instance
               .collection('users')
               .doc(profileUserId)
               .get();
-
       if (doc.exists) {
         setState(() {
           _userData = doc.data() as Map<String, dynamic>;
         });
       }
-
-      // Check follow status if viewing another user's profile
       if (!_isCurrentUser && currentUserId != null) {
         await _checkFollowStatus(currentUserId, profileUserId);
       }
-
       setState(() => _isLoading = false);
     } catch (e) {
       setState(() => _isLoading = false);
@@ -88,12 +82,10 @@ class _ProfileviewState extends State<Profileview>
             .collection('users')
             .doc(profileUserId)
             .get();
-
     final following = List<String>.from(currentUserDoc['following'] ?? []);
     final followRequests = List<String>.from(
       profileUserDoc['followrequests'] ?? [],
     );
-
     setState(() {
       _isFollowing = following.contains(profileUserId);
       _hasRequested = followRequests.contains(currentUserId);
@@ -104,11 +96,8 @@ class _ProfileviewState extends State<Profileview>
     try {
       final currentUserId = FirebaseAuth.instance.currentUser?.uid;
       final profileUserId = widget.userId;
-
       if (currentUserId == null || profileUserId == null) return;
-
       setState(() => _isLoading = true);
-
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         // Add to profile user's follow requests
         transaction.update(
@@ -118,12 +107,10 @@ class _ProfileviewState extends State<Profileview>
           },
         );
       });
-
       setState(() {
         _isLoading = false;
         _hasRequested = true;
       });
-
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Follow request sent')));
@@ -139,11 +126,8 @@ class _ProfileviewState extends State<Profileview>
     try {
       final currentUserId = FirebaseAuth.instance.currentUser?.uid;
       final profileUserId = widget.userId;
-
       if (currentUserId == null || profileUserId == null) return;
-
       setState(() => _isLoading = true);
-
       if (_isFollowing) {
         // Unfollow logic
         await FirebaseFirestore.instance.runTransaction((transaction) async {
@@ -393,9 +377,7 @@ class _ProfileviewState extends State<Profileview>
     return SizedBox(
       height: 50,
       child: ElevatedButton(
-        onPressed: () {
-          // Handle message button press
-        },
+        onPressed: () {},
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.white,
           foregroundColor: const Color(0xFF5669FF),
@@ -417,33 +399,58 @@ class _ProfileviewState extends State<Profileview>
   }
 
   Widget _buildAboutTab() {
-    final aboutText = _userData?['about'];
+    final aboutText = _userData?['about']?.trim(); // Trim whitespace
+    final bool hasAboutText = aboutText != null && aboutText.isNotEmpty;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (aboutText != null && aboutText.isNotEmpty)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [Text(aboutText, style: const TextStyle(fontSize: 17))],
+          const SizedBox(height: 16),
+
+          // Content
+          if (hasAboutText)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+
+              child: Text(
+                aboutText,
+                style: const TextStyle(
+                  fontSize: 16,
+                  height: 1.5, // Better line spacing
+                ),
+              ),
             )
           else
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.hourglass_empty_outlined,
-                  size: 50,
-                  color: Colors.grey[400],
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'No about information yet',
-                  style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                ),
-              ],
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 50,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No information yet',
+                    style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'This user hasn\'t shared any details',
+                    style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                  ),
+                ],
+              ),
             ),
-          const SizedBox(height: 20),
+
+          // Additional sections could be added here
+          if (hasAboutText) const SizedBox(height: 24),
         ],
       ),
     );
@@ -485,7 +492,6 @@ class _ProfileviewState extends State<Profileview>
   Widget _buildEventCard(Map<String, dynamic> event) {
     final dateTime = (event['eventDateTime'] as Timestamp).toDate();
     final eventType = event['eventType']?.toString() ?? 'default';
-    // Define images for different event types
     final eventImages = {
       'Conference': 'assets/images/event/confre.jpeg',
       'default': 'assets/images/event/default.jpeg',

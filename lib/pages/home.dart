@@ -182,9 +182,10 @@ class _HomeScreenState extends State<HomeScreen> {
               try {
                 await _authService.logout();
                 if (mounted) {
-                  Navigator.push(
+                  Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(builder: (context) => SignInScreen()),
+                    (Route<dynamic> route) => false,
                   );
                 }
               } catch (e) {
@@ -282,7 +283,7 @@ class _HomeContentState extends State<HomeContent> {
                             final data =
                                 snapshot.data!.data() as Map<String, dynamic>;
                             final requests =
-                                data['followRequest'] as List<dynamic>?;
+                                data['followrequests'] as List<dynamic>?;
                             hasRequests =
                                 requests != null && requests.isNotEmpty;
                           }

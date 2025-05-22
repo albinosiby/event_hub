@@ -100,7 +100,7 @@ class _NotifiState extends State<Notifi> {
         FirebaseFirestore.instance.collection('users').doc(currentUserId),
         {
           'followrequests': FieldValue.arrayRemove([userId]),
-          'follower': FieldValue.arrayUnion([userId]),
+          'followers': FieldValue.arrayUnion([userId]),
         },
       );
 

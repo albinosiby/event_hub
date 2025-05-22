@@ -27,9 +27,6 @@ class _ListeventState extends State<Listevent> {
       appBar: AppBar(title: const Text('Events')),
       body: Column(
         children: [
-          // Search Bar
-          // Set background color to white
-          // Search Bar
           Padding(
             padding: const EdgeInsets.all(16.0),
 

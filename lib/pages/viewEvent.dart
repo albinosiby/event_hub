@@ -23,7 +23,10 @@ class _VieweventState extends State<Viewevent> {
   @override
   void initState() {
     super.initState();
-    _eventFuture = _fetchEventDetails();
+    _eventFuture = _fetchEventDetails().then((eventDoc) {
+      loadDetail();
+      return eventDoc;
+    });
   }
 
   Future<DocumentSnapshot> _fetchEventDetails() async {
@@ -207,7 +210,6 @@ class _VieweventState extends State<Viewevent> {
                           ),
                           const SizedBox(width: 12),
 
-                          // Organizer Info
                           Expanded(
                             child: Row(
                               children: [
@@ -236,12 +238,7 @@ class _VieweventState extends State<Viewevent> {
                                 ),
                                 // Add follow button here
                                 ElevatedButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      _isFollowing = !_isFollowing;
-                                    });
-                                    // _handleFollowOrganizer();
-                                  },
+                                  onPressed: _handleFollowOrganizer,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor:
                                         _isFollowing
@@ -298,62 +295,54 @@ class _VieweventState extends State<Viewevent> {
     );
   }
 
-  /*void _handleFollowOrganizer() async {
+  Future<void> loadDetail() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null || _organizerId == null) return;
-    // Check if the current user is already following the organizer
-    final userDoc =
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.uid)
-            .get();
-    final userData = userDoc.data();
 
-    if (userData != null &&
-        userData['following'] != null &&
-        (userData['following'] as List).contains(_organizerId)) {
-      setState(() {
-        _isFollowing = true;
-      });
-    } else {
-      setState(() {
-        _isFollowing = false;
-      });
-    }
     try {
-      if (_isFollowing) {
-        // Unfollow logic
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.uid)
-            .update({
-              'following': FieldValue.arrayRemove([_organizerId]),
-            });
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(_organizerId)
-            .update({
-              'followers': FieldValue.arrayRemove([currentUser.uid]),
-            });
-      } else {
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.uid)
+              .get();
+
+      if (userDoc.exists) {
+        final userData = userDoc.data()!;
+        setState(() {
+          _isFollowing =
+              userData['following'] != null &&
+              (userData['following'] as List).contains(_organizerId);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error checking follow status: $e');
+    }
+  }
+
+  Future<void> _handleFollowOrganizer() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null || _organizerId == null) return;
+
+    try {
+      final organizerRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(_organizerId);
+
+      if (!_isFollowing) {
         // Follow logic
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(_organizerId)
-            .update({
-              'followrequests': FieldValue.arrayUnion([currentUser.uid]),
-            });
+        await organizerRef.update({
+          'followrequests': FieldValue.arrayUnion([currentUser.uid]),
+        });
+        setState(() {
+          _isFollowing = true;
+        });
       }
     } catch (e) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
-      // Revert the button state if there was an error
-      setState(() {
-        _isFollowing = !_isFollowing;
-      });
     }
-  }*/
+  }
 
   Widget _buildInfoRow({
     required String icon,

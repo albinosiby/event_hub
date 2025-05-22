@@ -1,3 +1,4 @@
+import 'package:event_hub/pages/profile.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -95,7 +96,6 @@ class _EditProfileState extends State<EditProfile> {
         'lastUpdated': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      _showSuccessSnackbar('Profile updated successfully');
       setState(() => _hasChanges = false);
     } catch (e) {
       _showErrorSnackbar('Error saving profile: $e');
@@ -103,9 +103,10 @@ class _EditProfileState extends State<EditProfile> {
       setState(() => _isLoading = false);
     }
     if (!mounted) return;
-    Navigator.pushReplacement(
+    Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => HomeScreen()),
+      (route) => false,
     );
   }
 
@@ -219,8 +220,6 @@ class _EditProfileState extends State<EditProfile> {
                               ),
                             ),
                             const SizedBox(height: 12),
-
-                            // Display current interests as chips
                             if (interests.isNotEmpty)
                               Wrap(
                                 spacing: 8,

@@ -48,7 +48,7 @@ class _ProfileState extends State<Profile> {
             }
 
             if (!snapshot.hasData || !snapshot.data!.exists) {
-              return _buildProfileUI(null); // Pass null for new users
+              return _buildProfileUI(null);
             }
 
             final userData = snapshot.data!.data() as Map<String, dynamic>?;
@@ -60,7 +60,6 @@ class _ProfileState extends State<Profile> {
   }
 
   Widget _buildProfileUI(Map<String, dynamic>? userData) {
-    // Safely extract data with null checks and defaults
     final aboutText = userData?['about'] as String? ?? 'No bio added yet';
     final interests = List<String>.from(userData?['interests'] ?? []);
     final followers = List<String>.from(userData?['followers'] ?? []).length;
@@ -198,8 +197,7 @@ class _ProfileState extends State<Profile> {
 
   Widget _buildAboutSection(String? aboutText, List<String> interests) {
     return Column(
-      crossAxisAlignment:
-          CrossAxisAlignment.start, // This ensures left alignment
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           'About Me',
@@ -207,12 +205,12 @@ class _ProfileState extends State<Profile> {
         ),
         const SizedBox(height: 10),
         Container(
-          width: double.infinity, // Takes full width
+          width: double.infinity,
           padding: const EdgeInsets.all(12),
           child: Text(
             aboutText ?? 'Add your about to let others know you better',
             style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w400),
-            textAlign: TextAlign.left, // Explicit left alignment
+            textAlign: TextAlign.left,
           ),
         ),
         const SizedBox(height: 20),
